@@ -12,6 +12,8 @@ def face_detection():
 
     img_file_buffer = st.camera_input("Webcam")
 
+    print(img_file_buffer)
+
     if img_file_buffer is not None:
 
         bytes_data = img_file_buffer.getvalue()
