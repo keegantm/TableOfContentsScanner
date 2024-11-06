@@ -1,0 +1,54 @@
+[
+    {
+      "chapter": "Chapter 1",
+      "author": "Author A",
+      "pageCount": 30,
+      "subChapters": [
+        {
+          "subChapter": "Chapter 1.1",
+          "title": "Introduction",
+          "pageCount": 10
+        },
+        {
+          "subChapter": "Chapter 1.2",
+          "title": "Background",
+          "pageCount": 20
+        }
+      ]
+    },
+    {
+      "chapter": "Chapter 2",
+      "author": "Author B",
+      "pageCount": 25,
+      "subChapters": [
+        {
+          "subChapter": "Chapter 2.1",
+          "title": "Theory",
+          "pageCount": 15
+        },
+        {
+          "subChapter": "Chapter 2.2",
+          "title": "Applications",
+          "pageCount": 10
+        }
+      ]
+    },
+    {
+      "chapter": "Chapter 3",
+      "author": "Author C",
+      "pageCount": 35,
+      "subChapters": [
+        {
+          "subChapter": "Chapter 3.1",
+          "title": "Methods",
+          "pageCount": 20
+        },
+        {
+          "subChapter": "Chapter 3.2",
+          "title": "Experiments",
+          "pageCount": 15
+        }
+      ]
+    }
+  ]
+  
