@@ -1,21 +1,73 @@
-'''
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode
-import pandas as pd
-import datetime
-import numpy as np
-import requests
-import uuid
-import json
 import cv2 as cv
-from streamlit_webrtc import webrtc_streamer
+import numpy as np
+from PIL import Image
+from streamlit_image_coordinates import streamlit_image_coordinates
+from streamlit_drawable_canvas import st_canvas
+import pandas as pd
 
+
+
+def getCameraDataThree():
+    camera_result = st.camera_input("Take a level, well lit picture of the table of contents here", key="camera")
+
+    if camera_result:
+        
+        #THIS IS CAUSING INF LOOP, SINCE MAIN KEEPS RERUNNING AND ALL THE VARS GET RESET
+        
+        if (st.session_state['image_captured'] != camera_result):
+            print("NEW PHOTO RESETTING STATES")
+            st.session_state['canvas'] = None
+            st.session_state['contour_gathered'] = False
+        
+        st.session_state['image_captured'] = camera_result
+
+def displayCanvasForEditing():
+
+    img = Image.open(st.session_state['image_captured'])
+    rgb_img = np.array(img)
+
+    canvas_result = st_canvas(
+        background_image=Image.open(st.session_state['image_captured']),
+        drawing_mode='polygon',
+        height = rgb_img.shape[0],
+        width = rgb_img.shape[1],
+        fill_color="",
+        stroke_width=5,
+        display_toolbar=False,
+        update_streamlit=False,
+    )
+
+    if canvas_result.json_data is not None:
+        
+        objects = pd.json_normalize(canvas_result.json_data["objects"]) # need to convert obj to str because PyArrow
+
+        if len(objects) == 1 and  st.session_state['contour_gathered'] == False:
+            #as soon as one polygon is drawn, we do not want the user to draw more. 
+            st.session_state['canvas'] = canvas_result.json_data
+            print("SAVED CANVAS DATA, of ONE CONTOUR")
+            st.session_state['contour_gathered'] = True
+            st.rerun()
+
+
+def displayCanvasResults():
+    
+    objects = pd.json_normalize(st.session_state['canvas']["objects"]) # need to convert obj to str because PyArrow
+    print("SHOWING DATA FOR CONTOUR")
+    print(objects)
+
+    for col in objects.select_dtypes(include=['object']).columns:
+        objects[col] = objects[col].astype("str")
+    
+    #TODO, make this display the image with their polygon on it
+    st.dataframe(objects)
+    
+    reset_canvas_btn = st.button("RESET CANVAS")
 
 header = st.container()
 instructions = st.container()
 
-input_area = st.container()
-sliders = st.container()
+user_input_zone = st.container()
 
 with header:
     st.title("Table of Contents Scanner")
@@ -23,56 +75,36 @@ with header:
 
 with instructions:
     st.write("Instructions blah blah blah")
-'''
 
-
-
-import streamlit as st
-from streamlit import session_state
-import cv2 as cv
-import numpy as np
-from PIL import Image
-from streamlit_image_coordinates import streamlit_image_coordinates
-
-def main_body():
+with user_input_zone:
     if 'image_captured' not in st.session_state.keys():
-        session_state['image_captured'] = None
+        print("Image initialized to none")
+        st.session_state['image_captured'] = None
 
-    camera_result = st.camera_input("Take a level, well lit picture of the table of contents here", key="camera")
-
-    if camera_result:
-        session_state['image_captured'] = camera_result
-        print("STATE UPDATED :", session_state['image_captured'])
-
-    if session_state['image_captured']:
-        img = Image.open(session_state['image_captured'])
-        rgb_img = np.array(img)
-
-        bgr_image = cv.cvtColor(rgb_img, cv.COLOR_RGB2BGR)
-
-        gray = cv.cvtColor(bgr_image, cv.COLOR_BGR2GRAY)
-
-        st.image(rgb_img)
-
-        value = streamlit_image_coordinates(rgb_img)
-
-        st.write(value)
+    if 'canvas' not in st.session_state.keys():
+        print("Canvas initialized to null")
+        st.session_state['canvas'] = None
+        st.session_state['contour_gathered'] = False
 
 
-        #print(open_cv_img)
-        #print(type(open_cv_img))
+    getCameraDataThree()
 
-        #st.image(rgb_img)
-        #st.image(gray)
+    if (st.session_state['image_captured'] != None):
+        print("have already captured img, decide what to show")
+        print("State Vars : ")
+        print("Captured img :", st.session_state['image_captured'])
+        print("Canvas :", st.session_state['canvas'])
+        print("Contour Gathered :", st.session_state['contour_gathered'])
 
-        '''
-        Options to crop/define the image space
-        https://github.com/andfanilo/streamlit-drawable-canvas
-        https://github.com/blackary/streamlit-image-coordinates
-        
-        '''
 
-main_body()
+
+
+        if not st.session_state['contour_gathered']:
+            displayCanvasForEditing()
+        else:
+            displayCanvasResults()
+
+
 #    st.write_stream    check this out
 
 
