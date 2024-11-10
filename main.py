@@ -51,8 +51,10 @@ def displayCanvasForEditing():
 
 
 def displayCanvasResults():
-    
-    objects = pd.json_normalize(st.session_state['canvas']["objects"]) # need to convert obj to str because PyArrow
+    # Original unaltered data
+    original_objects = st.session_state['canvas']["objects"]
+
+    objects = pd.json_normalize(original_objects) # need to convert obj to str because PyArrow
     print("SHOWING DATA FOR CONTOUR")
     print(objects)
 
@@ -61,8 +63,36 @@ def displayCanvasResults():
     
     #TODO, make this display the image with their polygon on it
     st.dataframe(objects)
+
+    #NOTE: If I use Image.crop from Pillow with a rectangular selection, its very easy to crop around a rectangle
+
+    #get the column in objects that contains the coords of the polygon
+    poly_path = original_objects[0]['path']
+    print(poly_path)
+    print(type(poly_path[0]))
+    #extract the coordinates from the list of points. In the path they are stuctured like [type, x, y], and the path ends with a ['z']
+    polygon_points = np.array([[point[1], point[2]] for point in poly_path if point[0] != 'z'])
+
+    print("Extracted Polygon Points:", polygon_points)
+
+
+    img = Image.open(st.session_state['image_captured'])
+    rgb_img = np.array(img)
+
+    #create a mask of all 0s
+    mask = np.zeros((rgb_img.shape[0],rgb_img.shape[1]) , dtype=np.uint8)
     
-    reset_canvas_btn = st.button("RESET CANVAS")
+    #color everything in the polygon as 255
+    polygon = np.array([polygon_points], dtype=np.int32)
+    cv.fillPoly(mask, polygon, 255)
+
+    #get a copy of the image, but have the pixels outside the polygon all be one color
+    output_image = rgb_img.copy()
+    output_image[mask == 0] = [255, 255, 255]
+
+    st.image(output_image)
+
+    
 
 header = st.container()
 instructions = st.container()
