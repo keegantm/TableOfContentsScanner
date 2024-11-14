@@ -2,7 +2,7 @@ import streamlit as st
 import cv2 as cv
 import numpy as np
 from PIL import Image
-from streamlit_image_coordinates import streamlit_image_coordinates
+#from streamlit_image_coordinates import streamlit_image_coordinates
 from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 
