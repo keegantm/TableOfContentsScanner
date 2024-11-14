@@ -93,11 +93,14 @@ def displayCanvasResults():
     st.image(output_image)
 
     
+    st.session_state['mask'] = output_image
+    st.session_state['poly'] = polygon
+    
 
 header = st.container()
 instructions = st.container()
-
 user_input_zone = st.container()
+computer_vision_zone = st.container()
 
 with header:
     st.title("Table of Contents Scanner")
@@ -126,15 +129,26 @@ with user_input_zone:
         print("Canvas :", st.session_state['canvas'])
         print("Contour Gathered :", st.session_state['contour_gathered'])
 
-
-
-
         if not st.session_state['contour_gathered']:
             displayCanvasForEditing()
         else:
             displayCanvasResults()
 
+with computer_vision_zone:
+    if st.session_state['contour_gathered']:
 
+        mask = st.session_state['mask']
+        polygon = st.session_state['poly'] #(x,y)
+        x,y,w,h  = cv.boundingRect(polygon)
+
+        cropped_image = mask[y:y+h, x:x+w]
+
+        st.image(cropped_image)
+
+        #note, maybe should be rgb -> gray
+        grayscale_cropped = cv.cvtColor(cropped_image, cv.COLOR_BGR2GRAY)
+
+        st.image(grayscale_cropped)
 #    st.write_stream    check this out
 
 
