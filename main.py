@@ -7,7 +7,6 @@ from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 
 
-
 def getCameraDataThree():
     camera_result = st.camera_input("Take a level, well lit picture of the table of contents here", key="camera")
 
@@ -141,6 +140,8 @@ with computer_vision_zone:
         polygon = st.session_state['poly'] #(x,y)
         x,y,w,h  = cv.boundingRect(polygon)
 
+        gray = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
+
         cropped_image = mask[y:y+h, x:x+w]
 
         st.image(cropped_image)
@@ -148,7 +149,12 @@ with computer_vision_zone:
         #note, maybe should be rgb -> gray
         grayscale_cropped = cv.cvtColor(cropped_image, cv.COLOR_BGR2GRAY)
 
-        st.image(grayscale_cropped)
+        larger_cropped = cv.resize(grayscale_cropped, (grayscale_cropped.shape[1] * 2, grayscale_cropped.shape[0] * 2))
+        st.image(larger_cropped)
+
+
+
+
 #    st.write_stream    check this out
 
 
