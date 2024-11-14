@@ -6,6 +6,14 @@ from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 
+'''
+Keegan's Todos:
+- Change polygon to rect
+- See how hard getting the angle would be 
+
+'''
+
+
 #https://www.youtube.com/watch?v=ADV-AjAXHdc&list=PL2VXyKi-KpYuTAZz__9KVl1jQz74bDG7i&index=4
 def getSkewAngle(cvImage) -> float:
     # Prep image, copy, convert to gray scale, blur, and threshold
