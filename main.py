@@ -6,7 +6,8 @@ from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 from scipy import ndimage
-
+import pytesseract
+from pytesseract import Output
 '''
 Keegan's Todos:
 - Change polygon to rect
@@ -83,7 +84,6 @@ def displayCanvasForEditing():
     )
 
     if canvas_result.json_data is not None:
-        #print(canvas_result.json_data)
         objects = pd.json_normalize(canvas_result.json_data["objects"]) # need to convert obj to str because PyArrow
 
         if len(objects) == 1 and  st.session_state['contour_gathered'] == False:
@@ -145,13 +145,10 @@ def displayLineInput():
 
     if canvas_result.json_data is not None:
         objects = pd.json_normalize(canvas_result.json_data["objects"]) # need to convert obj to str because PyArrow
-        print(len(objects))
         if len(objects) == 1 and st.session_state['angleFound'] == False:
-            print("Found the angle")
 
             st.session_state['angle'] = canvas_result.json_data
             st.session_state['angleFound'] = True
-            print(st.session_state['angleFound'])
             st.rerun()
 
 
@@ -225,9 +222,6 @@ with computer_vision_zone:
             p1 = (objects['x1'].iloc[0], objects['y1'].iloc[0])
             p2 = (objects['x2'].iloc[0], objects['y2'].iloc[0])
 
-            print(p1)
-            print(p2)
-
             angle_in_radians = 0
             if (p1[0] < p2[0]):
                 angle_in_radians = np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
@@ -237,7 +231,6 @@ with computer_vision_zone:
             angle_in_degrees = np.degrees(angle_in_radians)
 
             rotated = ndimage.rotate(img, angle_in_degrees, reshape=False)
-
             rotated = cv.resize(rotated, (rotated.shape[0] * 2, rotated.shape[1] * 2))
 
             # Convert to grayscale
@@ -255,32 +248,32 @@ with computer_vision_zone:
             st.session_state["grayscale_img"] = grayscale_img
 
             equ = cv.equalizeHist(grayscale_img)
-            st.image(equ, caption="Histogram Equalized")
+            #st.image(equ, caption="Histogram Equalized")
 
             clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             cl1 = clahe.apply(grayscale_img)
-            st.image(cl1, caption="Adaptive hstEQ")
+            #st.image(cl1, caption="Adaptive hstEQ")
 
             normalizedImg = cv.normalize(grayscale_img, None, 0, 255, cv.NORM_MINMAX)
-            st.image(normalizedImg, caption="Normalized")
+            #st.image(normalizedImg, caption="Normalized")
 
             equ2 = cv.equalizeHist(normalizedImg)
-            st.image(equ2, caption="Normalized, then eqHST")
+            #st.image(equ2, caption="Normalized, then eqHST")
 
             eq3 = clahe.apply(normalizedImg)
-            st.image(eq3, caption="Normalized, then adaptice hstEQ")
+            #st.image(eq3, caption="Normalized, then adaptice hstEQ")
             
             imgf0 = adaptive_threshold(grayscale_img, block_size=11, C=5)
-            st.image(imgf0, caption="Local Adaptive Threshold on gray")
+            #st.image(imgf0, caption="Local Adaptive Threshold on gray")
 
             imgf = adaptive_threshold(normalizedImg, block_size=15, C=7)
-            st.image(imgf, caption="Local Adaptive Threshold on normalized")
+            #st.image(imgf, caption="Local Adaptive Threshold on normalized")
 
             imgf2 = adaptive_threshold(eq3, block_size=11, C=5)
-            st.image(imgf2, caption="Local Adaptive Threshold on normalized + Adaptive hst")
+            #st.image(imgf2, caption="Local Adaptive Threshold on normalized + Adaptive hst")
 
             imgf3 = adaptive_threshold(cl1, block_size=11, C=5)
-            st.image(imgf3, caption="Threshold on adaptive HstEQ")
+            #st.image(imgf3, caption="Threshold on adaptive HstEQ")
 
             #Rotate manually
             #DONE
@@ -294,7 +287,48 @@ with computer_vision_zone:
 
             #Algorithmic deskewing - Skip for now
 
-            #Contour stuff. Get rid of borders, isolate chunks of txt, ect
+            
+            copy = no_noise.copy()
+
+            #erode in the horizontal especially, to connect the letters
+            kernel = cv.getStructuringElement(cv.MORPH_RECT, (7,3))
+            eroded =  cv.erode(no_noise, kernel, iterations=2)
+
+            #find contours NOTE: Look into different hierarchies RETR_TREE, List, ect
+            contours, hierarchy = cv.findContours(eroded, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+
+            #remove largest contour
+            sorted_contours = sorted(contours, key=lambda c: cv.boundingRect(c)[2] * cv.boundingRect(c)[3], reverse=True)
+            cnts = sorted_contours[1:]
+            cnts = sorted(cnts, key=lambda c: cv.boundingRect(c)[1])
+
+
+            data = []
+            for c in cnts:
+                x, y, w, h = cv.boundingRect(c)
+                if (w * h) > 300: #only include big enough 
+                    #region of interest, in the rectangle
+                    roi = no_noise[y:y+h, x:x+w]
+
+                    #add a rectangle to the img
+                    cv.rectangle(eroded, (x, y), (x+w, y+h), (100, 100, 100), 2)
+                    cv.rectangle(copy, (x, y), (x+w, y+h), (100, 100, 100), 2)
+
+                    #use ocr on the ROI
+                    ocr_result = pytesseract.image_to_string(roi)
+
+                    data.append({
+                        'Bounding Box X': x,
+                        'Bounding Box Y': y,
+                        'Bounding Box Width': w,
+                        'Bounding Box Height': h,
+                        'OCR_Text': ocr_result
+                    })
+            st.image(eroded, caption = "Using erosion and contour detection for text blocks")
+            st.image(copy)
+
+            df = pd.DataFrame(data)
+            st.dataframe(df)
 
 #    st.write_stream    check this out
 
