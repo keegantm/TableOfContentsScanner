@@ -1,69 +1,36 @@
-from utils import *
 import cv2
-import numpy as np  
+import pytesseract
 import matplotlib.pyplot as plt
-from PIL import Image
+from utils import *
 
-
+# Load the original image
 input_image = cv2.imread('Images/IMG_8248.jpg')
 
 # Convert to grayscale
 gray = to_grayscale(input_image)
 
-# # Apply CLAHE to enhance contrast
-enhanced_contrast = clahe(gray)
+# Apply CLAHE for localized contrast enhancement
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+enhanced_contrast = clahe.apply(gray)
 
-# Denoise the image
-# quiet = gaussian_blur(enhanced_contrast)
-quiet = median_blur(enhanced_contrast, kernel_size=3)
+# Reduce noise with bilateral filter
+quiet = cv2.bilateralFilter(enhanced_contrast, d=9, sigmaColor=75, sigmaSpace=75)
 
-text = pytesseract.image_to_string(quiet)
-print(text)
+# Adaptive thresholding for binarization
+adaptive_bi = cv2.adaptiveThreshold(quiet, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
-cv2.imshow("Image", quiet)
-cv2.imshow("Output", gray)
+# Optional: Dilate to make text more readable
+kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+processed = cv2.dilate(adaptive_bi, kernel, iterations=2)
 
-# # Apply adaptive thresholding
-# adaptive_bi = adaptive_threshold(quiet)
+# Display the final processed image
+plt.figure(figsize=(6, 6))
+plt.imshow(processed, cmap='gray')
+plt.title("Processed Image for OCR")
+plt.axis('off')
+plt.show()
 
-# # # Reduce noise with Median Blurring
-# # smoothed = median_blur(adaptive_bi, kernel_size=3)
-
-# # Further clean up with Morphological Opening
-# cleaned_image = morphological_opening(adaptive_bi, kernel_size=(3, 3))
-
-# # Display results
-# plt.figure(figsize=(12, 8))
-
-# # Original Image
-# plt.subplot(1, 5, 1)
-# plt.imshow(cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB))
-# plt.title('Original Image')
-# plt.axis('off')
-
-# # Contrast Enhanced
-# plt.subplot(1, 5, 2)
-# plt.imshow(enhanced_contrast, cmap='gray')
-# plt.title('Contrast Enhanced')
-# plt.axis('off')
-
-# # Denoised Image
-# plt.subplot(1, 5, 3)
-# plt.imshow(quiet, cmap='gray')
-# plt.title('Denoised')
-# plt.axis('off')
-
-# # Adaptive Thresholded
-# plt.subplot(1, 5, 4)
-# plt.imshow(adaptive_bi, cmap='gray')
-# plt.title('Adaptive Thresholded')
-# plt.axis('off')
-
-# # Cleaned Image
-# plt.subplot(1, 5, 5)
-# plt.imshow(cleaned_image, cmap='gray')
-# plt.title('Noise Reduced')
-# plt.axis('off')
-
-# plt.tight_layout()
-# plt.show()
+# Extract text using Tesseract
+config = '--oem 1 --psm 6'
+text = pytesseract.image_to_string(processed, config=config)
+print("Extracted Text:\n", text)

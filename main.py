@@ -87,7 +87,7 @@ def getCameraDataThree():
             if ('rect' in st.session_state.keys()):
                 st.session_state['rect'] = None
 
-            st.cache_data.clear()
+            st.cache_data.clear() # This is causing an error for me when I take a picture, not sure why.
 
         st.session_state['image_captured'] = camera_result
 
