@@ -62,7 +62,8 @@ def getCameraDataThree():
             if ('rect' in st.session_state.keys()):
                 st.session_state['rect'] = None
 
-            st.cache_data.clear() # This is causing an error for me when I take a picture, not sure why.
+            st.cache_data.clear() # This is causing an error for me when I take a picture.
+            # https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_data
 
         st.session_state['image_captured'] = camera_result
 
