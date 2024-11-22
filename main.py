@@ -232,7 +232,9 @@ with computer_vision_zone:
             angle_in_degrees = np.degrees(angle_in_radians)
 
             rotated = ndimage.rotate(img, angle_in_degrees, reshape=False)
-            rotated = cv.resize(rotated, (rotated.shape[0] * 2, rotated.shape[1] * 2))
+            new_width = rotated.shape[1] * 2  # Width is the second dimension
+            new_height = rotated.shape[0] * 2  # Height is the first dimension
+            rotated = cv.resize(rotated, (new_width, new_height))
 
             # Convert to grayscale
             grayscale_img = cv.cvtColor(rotated, cv.COLOR_RGB2GRAY)
