@@ -153,6 +153,70 @@ def displayLineInput():
             st.rerun()
 
 
+def calculateLinkedLists(df):
+
+    #First, preprocess the nodes (a dataframe)
+
+    nodes = df.copy()
+    #Used to link this node to the previous in the Linked list
+    nodes["Next"] = np.nan
+    nodes["Prev"] = np.nan
+
+    #remove boxes with no content. Since some of these boxes are from noise, 
+    #they mess up the algo
+    nodes=nodes.sort_values(by="Bounding Box X", axis=0)
+    nodes=nodes[nodes['OCR_Text'] != ""] 
+
+    #reset indices (they were rearranged-in place then df got sorted), while saving previously used indices
+    nodes.reset_index(inplace=True)
+
+    nodes_copy=nodes.copy()
+
+    st.dataframe(nodes)
+
+    #line for testing intersection. 0 def angle, so horizontal
+    line_y = None
+    prev = None
+    for i, r in nodes_copy.iterrows():
+        
+        #NOTE: Might have to use df.loc or df.iloc to access individual cell values
+
+        node_i = r["index"]
+        #check if new LL built from this node
+        if pd.isnull(nodes[node_i]["Prev"]):
+            #new LL!
+            
+            #update line to search with:
+            line_y=r["Bounding Box Y"] + ( r["Bounding Box Height"]//2 )
+            
+            #iterate through all rows, from this index onward
+            for j, sub_r in nodes_copy.iloc[i:].iterrows():
+
+                #if intersects with middle line and no Prev, add to LL
+                sub_r_lower = sub_r["Bounding Box Y"]
+                sub_r_higher = sub_r_lower + h
+                if(sub_r_lower <= line_y and sub_r_higher >= line_y):
+                    #Intersection!!! 
+
+                    sub_i = sub_r["index"]
+                    if pd.isnull(nodes[sub_i]["Prev"]):
+                        #can be added to LL
+                        nodes[sub_i]["Prev"] = nodes[node_i]
+
+
+                    #update the Prev and Next values
+                    #update Line val for next intersection 
+
+
+
+        #print(f'index : {i} row:{r}')             
+
+        
+
+    
+
+
+
 with header:
     st.title("Table of Contents Scanner")
     st.text("Add very brief intro")
@@ -332,6 +396,9 @@ with computer_vision_zone:
 
             df = pd.DataFrame(data)
             st.dataframe(df)
+
+            #group the boxes by line
+            calculateLinkedLists(df)
 
 #    st.write_stream    check this out
 
