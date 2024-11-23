@@ -153,64 +153,113 @@ def displayLineInput():
             st.rerun()
 
 
-def calculateLinkedLists(df):
+def calculate_linked_lists(df):
+    # Preprocess the DataFrame
+    # ------------------------
+    # Create a working copy of the DataFrame and add columns for linked list pointers
+    rectangles = df.copy()
+    rectangles["Next"] = np.nan  # Pointer to the next rectangle in the linked list
+    rectangles["Prev"] = np.nan  # Pointer to the previous rectangle in the linked list
 
-    #First, preprocess the nodes (a dataframe)
+    # Add bounding box boundaries as separate columns for clarity
+    rectangles["x_min"] = rectangles["Bounding Box X"]
+    rectangles["x_max"] = rectangles["Bounding Box X"] + rectangles["Bounding Box Width"]
+    rectangles["y_min"] = rectangles["Bounding Box Y"]
+    rectangles["y_max"] = rectangles["Bounding Box Y"] + rectangles["Bounding Box Height"]
 
-    nodes = df.copy()
-    #Used to link this node to the previous in the Linked list
-    nodes["Next"] = np.nan
-    nodes["Prev"] = np.nan
+    # Remove rows with empty text (to ignore noisy bounding boxes)
+    rectangles = rectangles[rectangles['OCR_Text'] != ""]
 
-    #remove boxes with no content. Since some of these boxes are from noise, 
-    #they mess up the algo
-    nodes=nodes.sort_values(by="Bounding Box X", axis=0)
-    nodes=nodes[nodes['OCR_Text'] != ""] 
+    # Sort rectangles by x_min (left-to-right order)
+    rectangles = rectangles.sort_values(by="x_min").reset_index(drop=False)
 
-    #reset indices (they were rearranged-in place then df got sorted), while saving previously used indices
-    nodes.reset_index(inplace=True)
+    # Iterate through rectangles to calculate linked lists
+    # ----------------------------------------------------
+    for i, current_rect in rectangles.iterrows():
+        # Extract bounds for the current rectangle
+        current_y_min = current_rect["y_min"]
+        current_y_max = current_rect["y_max"]
+        current_x_max = current_rect["x_max"]
 
-    nodes_copy=nodes.copy()
+        # Iterate through rectangles to the right of the current rectangle
+        for j, potential_rect in rectangles.iloc[i+1:].iterrows():
+            # Extract bounds for the potential rectangle
+            potential_y_min = potential_rect["y_min"]
+            potential_y_max = potential_rect["y_max"]
+            potential_x_min = potential_rect["x_min"]
 
-    st.dataframe(nodes)
+            # Check if the rectangle is horizontally to the right. With an added threshold
+            if potential_x_min >= (current_x_max - 20):
+                # Check for vertical overlap
+                if (current_y_min <= potential_y_max and current_y_max >= potential_y_min):
+                    # Intersection detected! Add to the linked list.
+                    rectangles.at[i, "Next"] = j  # Update "Next" pointer for current rectangle
+                    rectangles.at[j, "Prev"] = i  # Update "Prev" pointer for the intersected rectangle
+                    break  # Stop after finding the first intersection to the right
 
-    #line for testing intersection. 0 def angle, so horizontal
-    line_y = None
-    prev = None
-    for i, r in nodes_copy.iterrows():
+    return rectangles
+
+def calculateText(df):
+    #copy df and add a col
+    lists = df.copy()
+    lists["LL_Text"] = None
+
+    #create set for LL Heads
+    ll_head_indices = set()
+
+    lists["Next"] = lists["Next"].fillna(-1).astype(int)
+    lists["Prev"] = lists["Prev"].fillna(-1).astype(int)
+
+    #convert columns of DF from float to int
+    if "Next" in lists.columns:
+        lists["Next"] = lists["Next"].apply(lambda x: int(x))
+    if "Prev" in lists.columns:
+        lists["Prev"] = lists["Prev"].apply(lambda x: int(x))
+
+    #iterate through the df.
+    for i, current_rect in lists.iterrows():
         
-        #NOTE: Might have to use df.loc or df.iloc to access individual cell values
+        if current_rect["Prev"] == -1:
+            #it's the head of a list
+            ll_head_indices.add(i)
 
-        node_i = r["index"]
-        #check if new LL built from this node
-        if pd.isnull(nodes[node_i]["Prev"]):
-            #new LL!
-            
-            #update line to search with:
-            line_y=r["Bounding Box Y"] + ( r["Bounding Box Height"]//2 )
-            
-            #iterate through all rows, from this index onward
-            for j, sub_r in nodes_copy.iloc[i:].iterrows():
+            list_text = []
+            list_text.append(current_rect["OCR_Text"])
 
-                #if intersects with middle line and no Prev, add to LL
-                sub_r_lower = sub_r["Bounding Box Y"]
-                sub_r_higher = sub_r_lower + h
-                if(sub_r_lower <= line_y and sub_r_higher >= line_y):
-                    #Intersection!!! 
+            next_node_i = int(current_rect["Next"]) #convert to python int, instead of numpy int
+            while next_node_i != -1:
+                
+                next_node_i = int(next_node_i) #convert to python int, instead of numpy int
 
-                    sub_i = sub_r["index"]
-                    if pd.isnull(nodes[sub_i]["Prev"]):
-                        #can be added to LL
-                        nodes[sub_i]["Prev"] = nodes[node_i]
+                if not isinstance(next_node_i, int):
+                    raise TypeError(
+                        f"Expected integer index, but got {type(next_node_i)}: {next_node_i}"
+                    )
+        
+                #use index to retrieve next node row
+                next_node = lists.iloc[next_node_i]
+
+                #add text to list
+                list_text.append(next_node["OCR_Text"])
+
+                #update next node pointer
+                next_node_i = next_node["Next"]
+    
+            concatenated_text = " ".join(list_text)
+            lists.at[i, "LL_Text"] = concatenated_text
+
+    ll_heads_df = lists.loc[list(ll_head_indices)].reset_index(drop=True)
+    return ll_heads_df
 
 
-                    #update the Prev and Next values
-                    #update Line val for next intersection 
 
 
+    #when we reach a list w no prev, its a LL head
+    #add to set
+    #travel down the LL, building List of text
 
-        #print(f'index : {i} row:{r}')             
-
+        #at the end, concat the list and set as its text col
+                
         
 
     
@@ -397,8 +446,15 @@ with computer_vision_zone:
             df = pd.DataFrame(data)
             st.dataframe(df)
 
-            #group the boxes by line
-            calculateLinkedLists(df)
+            #group text horizontally, create LL 
+            rectangle_lists = calculate_linked_lists(df)
+
+            st.dataframe(rectangle_lists)
+
+            #concatenate the text, based off the linked list
+            linked_list_df = calculateText(rectangle_lists)
+
+            st.dataframe(linked_list_df)
 
 #    st.write_stream    check this out
 
