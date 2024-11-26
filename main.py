@@ -402,7 +402,6 @@ with computer_vision_zone:
             st.image(no_noise, caption="Noise Reduction on normalized")
 
             #Algorithmic deskewing - Skip for now
-
             
             copy = no_noise.copy()
 
@@ -417,7 +416,6 @@ with computer_vision_zone:
             sorted_contours = sorted(contours, key=lambda c: cv.boundingRect(c)[2] * cv.boundingRect(c)[3], reverse=True)
             cnts = sorted_contours[1:]
             cnts = sorted(cnts, key=lambda c: cv.boundingRect(c)[1])
-
 
             data = []
             for c in cnts:
@@ -453,9 +451,15 @@ with computer_vision_zone:
 
             #concatenate the text, based off the linked list
             linked_list_df = calculateText(rectangle_lists)
-
+            
+            linked_list_df['Author'] = ''
+            linked_list_df['Title'] = ''
+            
             st.dataframe(linked_list_df)
-
+            
+            # Make dataframe editable
+            st.data_editor(linked_list_df, column_order=['LL_Text', 'Author', 'Title'], num_rows='dynamic', disabled=False)
+            
 #    st.write_stream    check this out
 
 
