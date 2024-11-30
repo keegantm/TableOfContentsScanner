@@ -40,6 +40,7 @@ instructions = st.container()
 crop_input_zone = st.container()
 angle_input_zone = st.container()
 computer_vision_zone = st.container()
+result_edit_zone = st.container()
 
 def getCameraDataThree():
     camera_result = st.camera_input("Take a level, well lit picture of the table of contents here", key="camera")
@@ -51,7 +52,7 @@ def getCameraDataThree():
         if (st.session_state['image_captured'] != camera_result):
             print("NEW PHOTO RESETTING STATES")
             st.session_state['canvas'] = None
-            st.session_state['contour_gathered'] = False
+            st.session_state['cropped'] = False
 
             if ('angleFound' in st.session_state.keys()):
                 st.session_state['angleFound'] = False
@@ -61,6 +62,12 @@ def getCameraDataThree():
 
             if ('rect' in st.session_state.keys()):
                 st.session_state['rect'] = None
+
+            if ('comp_vision_completed' in st.session_state.keys()):
+                st.session_state['comp_vision_completed'] = False
+                
+            if ('df' in st.session_state.keys()):
+                st.session_state['df'] = None
 
             st.cache_data.clear() # This is causing an error for me when I take a picture.
             # https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_data
@@ -87,11 +94,11 @@ def displayCanvasForEditing():
     if canvas_result.json_data is not None:
         objects = pd.json_normalize(canvas_result.json_data["objects"]) # need to convert obj to str because PyArrow
 
-        if len(objects) == 1 and  st.session_state['contour_gathered'] == False:
+        if len(objects) == 1 and  st.session_state['cropped'] == False:
             #as soon as one polygon is drawn, we do not want the user to draw more. 
             st.session_state['canvas'] = canvas_result.json_data
             print("SAVED CANVAS DATA, of ONE CONTOUR")
-            st.session_state['contour_gathered'] = True
+            st.session_state['cropped'] = True
 
             original_objects = canvas_result.json_data["objects"]
             x = original_objects[0]['left']
@@ -253,17 +260,11 @@ def calculateText(df):
 
 
 
-
-    #when we reach a list w no prev, its a LL head
-    #add to set
-    #travel down the LL, building List of text
-
-        #at the end, concat the list and set as its text col
-                
-        
-
     
 
+    #add a row to it to be the "root"
+    #generate ids for each element
+    #
 
 
 with header:
@@ -281,7 +282,7 @@ with crop_input_zone:
     if 'canvas' not in st.session_state.keys():
         #print("Canvas initialized to null")
         st.session_state['canvas'] = None
-        st.session_state['contour_gathered'] = False
+        st.session_state['cropped'] = False
 
 
     getCameraDataThree()
@@ -291,14 +292,15 @@ with crop_input_zone:
         #print("State Vars : ")
         #print("Captured img :", st.session_state['image_captured'])
         #print("Canvas :", st.session_state['canvas'])
-        #print("Contour Gathered :", st.session_state['contour_gathered'])
+        #print("Contour Gathered :", st.session_state['cropped'])
 
-        if not st.session_state['contour_gathered']:
+        if not st.session_state['cropped']:
             displayCanvasForEditing()
         else:
             displayCanvasResults()
 
 with angle_input_zone:
+
 
     if 'angleFound' not in st.session_state.keys():
         #could retrieve the rectangle here?
@@ -306,7 +308,7 @@ with angle_input_zone:
         st.session_state['angleFound'] = False
 
 
-    if (st.session_state['image_captured'] != None) and (st.session_state['contour_gathered'] == True):
+    if (st.session_state['image_captured'] != None) and (st.session_state['cropped'] == True):
         st.text("READY FOR LINE")
 
         if not (st.session_state["angleFound"]):
@@ -319,9 +321,14 @@ with angle_input_zone:
         st.text("NOT READY FOR LINE")
 
 with computer_vision_zone:
-    if st.session_state.get("angleFound"):
+    if ("comp_vision_completed") not in st.session_state.keys():
+        st.session_state['comp_vision_completed'] = False
+        st.session_state['df'] = None
+
+    if st.session_state.get("angleFound") and not st.session_state['comp_vision_completed']:
         # Ensure the angle has been calculated and the image is ready
-        if "rect" in st.session_state:
+        if "rect" in st.session_state.keys():
+
             original_objects = st.session_state['angle']["objects"]
 
             img = st.session_state['rect']
@@ -362,17 +369,21 @@ with computer_vision_zone:
 
             # Store the grayscale image in session state for OCR
             st.session_state["grayscale_img"] = grayscale_img
-
+            
+            '''
             equ = cv.equalizeHist(grayscale_img)
             #st.image(equ, caption="Histogram Equalized")
+            '''
 
+            '''
             clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             cl1 = clahe.apply(grayscale_img)
             #st.image(cl1, caption="Adaptive hstEQ")
-
+            '''
             normalizedImg = cv.normalize(grayscale_img, None, 0, 255, cv.NORM_MINMAX)
             #st.image(normalizedImg, caption="Normalized")
 
+            '''
             equ2 = cv.equalizeHist(normalizedImg)
             #st.image(equ2, caption="Normalized, then eqHST")
 
@@ -381,16 +392,18 @@ with computer_vision_zone:
             
             imgf0 = adaptive_threshold(grayscale_img, block_size=11, C=5)
             #st.image(imgf0, caption="Local Adaptive Threshold on gray")
+            '''
 
             imgf = adaptive_threshold(normalizedImg, block_size=15, C=7)
             #st.image(imgf, caption="Local Adaptive Threshold on normalized")
 
+            '''
             imgf2 = adaptive_threshold(eq3, block_size=11, C=5)
             #st.image(imgf2, caption="Local Adaptive Threshold on normalized + Adaptive hst")
 
             imgf3 = adaptive_threshold(cl1, block_size=11, C=5)
             #st.image(imgf3, caption="Threshold on adaptive HstEQ")
-
+            '''
             #Rotate manually
             #DONE
 
@@ -449,20 +462,85 @@ with computer_vision_zone:
 
             st.dataframe(rectangle_lists)
 
-            #concatenate the text, based off the linked list
             linked_list_df = calculateText(rectangle_lists)
+
+            st.session_state['comp_vision_completed'] = True
+            st.session_state['df'] = linked_list_df
+
+            #concatenate the text, based off the linked list
             
-            linked_list_df['Author'] = ''
-            linked_list_df['Title'] = ''
+
             
             st.dataframe(linked_list_df)
             
             # Make dataframe editable
-            st.data_editor(linked_list_df, column_order=['LL_Text', 'Author', 'Title'], num_rows='dynamic', disabled=False)
             
+            #st.dataframe(edited_df)
+
+            #st.button(label="Generate Hierarchy", on_click=generate_hierarchy, args=(edited_df,))
+
+            #generate_hierarchy(edited_df)
+
+
 #    st.write_stream    check this out
 
+with result_edit_zone:
+    if (st.session_state["comp_vision_completed"]):
+        df = st.session_state["df"]
 
+        df['Author'] = ''
+        df['Title'] = ''
+
+        edited_df = st.data_editor(df, column_order=['LL_Text', 'Author', 'Title'], num_rows='dynamic', disabled=False)
+
+        sorted_df = edited_df.sort_values(by="y_min").reset_index(drop=True)
+
+
+        #st.dataframe(sorted_df) 
+        #print(sorted_df.columns.tolist())
+
+        #add a row for the root
+        root_row = pd.DataFrame({
+            'index': [None],
+            'Bounding Box X': [None],
+            'Bounding Box Y': [None],
+            'Bounding Box Width': [None],
+            'Bounding Box Height': [None],
+            'OCR_Text': ['ROOT'],
+            'Next': [None],
+            'Prev': [None],
+            'x_min': [None],
+            'x_max': [None],
+            'y_min': [None],
+            'y_max': [None],
+            'LL_Text': [None],
+            'Author': [None],
+            'Title': [None]
+        })
+
+        df = pd.concat([root_row, sorted_df], ignore_index=True)
+
+        #add a column for "type". make '' for all except root.
+        df['Type'] = ''
+        df.at[0, 'Type'] = "ROOT"
+        df.at[0, 'LL_Text'] = "ROOT"
+
+        #add a path column. Make sure it's dtype=object 
+        df['Path'] = [[] for _ in range(len(df))]
+        #for all except ROOT the contents of this col will be like ['ROOT', ' ROW TEXT']
+        df.at[0, 'Path'] = ['ROOT']
+        for i in range(1, len(df)):
+            df.at[i, 'Path'] = ['ROOT', df.at[i, 'LL_Text']]
+
+        st.dataframe(df)
+
+        df_subset = df[["LL_Text","Type","Path"]]
+        df_subset.rename(columns={"LL_Text": "Text"})
+        json = df_subset.to_json(orient='records')
+
+        print(json)
+        
+        #add a 
 #get the webcam thingy working
 #get two sliders
 #get webcam showing up
