@@ -205,16 +205,24 @@ function onRowDragEnd(e) {
       
     if (needToChangeParent && !invalidMode) {
         var updatedRows = [];
-        console.log("BEFORE");
         moveToPath(newParentPath, e.node, updatedRows);
-        console.log("AFTER");
                       
+        //refreshClientSideRowModel();
+        
+                      
+        var element = document.getElementById("gridContainer");
+        console.log("DIV", element);
+        
+        //element.applyTransaction({
+        //    update: updatedRows,
+        //});
+        //element.clearFocusedCell();
+        //DOES NOT WORK, window.gridApi is undefined due to hard-coded AG-Grid onGridReady
+        // window.gridApi.applyTransaction({
+        //    update: updatedRows,
+        //});
 
-        window.gridApi.applyTransaction({
-            update: updatedRows,
-        });
-
-        window.gridApi.clearFocusedCell();
+        //window.gridApi.clearFocusedCell();
     }
 }
 """)
@@ -236,8 +244,8 @@ function onGridReady(params) {
 onRowDragMove = JsCode("""
 function onRowDragMove(event) {
     //console.log("RowDragMove", event);
-    var movingNode = event.node;
-    var overNode = event.overNode;
+    //var movingNode = event.node;
+    //var overNode = event.overNode;
 
     //console.log("Moving :", movingNode);
     //console.log("Over :", overNode);
@@ -250,22 +258,70 @@ function getDataPath(data) {
 } 
 """)
 
-#https://discuss.streamlit.io/t/drag-and-drop-rows-in-a-dataframe/33077
-with st.container():
-    data = pd.read_json('contents_tree.json')
+getTitle = JsCode("""
+function getDataTitle(params) {
+    //console.log("PARAMS", params);
+    //console.log(params.data.title);
+                  
+    //have the grouped column be by the title
+    return params.data.title;
+}
+""")
 
-    gb = GridOptionsBuilder.from_dataframe(data)
-    gb.configure_default_column(rowDrag = True, rowDragManaged = False, rowDragEntireRow = True, rowDragMultiRow=True)
-    gb.configure_column('bloco', rowDrag = True, rowDragEntireRow = True)
-    gb.configure_grid_options(rowDragManaged = False, onRowDragEnd = onRowDragEnd, deltaRowDataMode = False, getRowNodeId = getRowNodeId, animateRows = False, onRowDragMove = onRowDragMove, groupDefaultExpanded=-1, treeData=True, getDataPath=getDataPath, onGridReady=onGridReady)
+def createGrid(db):
+    print("IN BUILDER")
+    gb = GridOptionsBuilder.from_dataframe(db)
+
+    gb.configure_default_column(rowDrag = False, rowDragManaged = False, rowDragEntireRow = False, rowDragMultiRow=False)
+    gb.configure_grid_options(rowDragManaged = False, onRowDragEnd = onRowDragEnd, getRowNodeId = getRowNodeId, groupDefaultExpanded=-1, treeData=True, getDataPath=getDataPath, 
+    autoGroupColumnDef=dict(
+        rowDrag=True,
+        minWidth=300, 
+        pinned="The Groups", 
+        cellRendererParams=dict(suppressCount=True, innerRenderer=getTitle)
+    ))
     gridOptions = gb.build()
 
-    grid = AgGrid(data,
+    grid = AgGrid(db,
         gridOptions=gridOptions,
         allow_unsafe_jscode=True,
-        update_on=['rowDragEnd', 'columnRowGroupChanged', 'rowDataUpdated'],)
+        update_on=['rowDragEnd'],)
+    
+    return grid
+#https://discuss.streamlit.io/t/drag-and-drop-rows-in-a-dataframe/33077
+with st.container():
 
-st.write(grid['data'])
+    if 'db' not in st.session_state.keys():
+        data = pd.read_json('contents_tree.json')
+        st.session_state['db'] = data
+        print("INITIALIZED")
+    db = st.session_state['db']
+    resp = createGrid(db)
+        
+    if (resp.event_data):
+
+        #check if the paths are any different
+        before_df = st.session_state['db']
+        current_df = resp['data']
+
+        before_paths = set(tuple(path) for path in before_df["path"])
+        current_paths = set(tuple(path) for path in current_df["path"])
+        
+        difference = before_paths != current_paths
+
+        if (difference):
+            print("NEW DATA")
+            st.write(resp.event_data)
+            st.session_state['db'] = resp['data']
+            st.rerun()
+        else:
+            print("IDENTICAL")
+
+
+
+
+#st.write(grid['data'])
+#st.write(grid.grid_options)
 
 '''
 Project Steps:
