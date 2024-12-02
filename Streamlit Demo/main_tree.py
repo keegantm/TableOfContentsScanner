@@ -87,8 +87,9 @@ gridOptions = {
     "rowData": data,
 }
 
-
+'''
 tabs = st.tabs(["Grid", "Underlying Data", "Grid Options", "Grid Return"])
+drag_container = st.container()
 
 with tabs[0]:
     r = AgGrid(
@@ -106,11 +107,165 @@ with tabs[1]:
 
 with tabs[2]:
     st.write(gridOptions)
-
+'''
 face_detection()
 # tabs =  st.tabs(['Selected Rows','gridoptions','grid_response'])
 
 # with tabs[0]:
+
+
+onRowDragEnd = JsCode("""
+function onRowDragEnd(e) {
+    console.log('onRowDragEnd', e);
+                      
+    var overNode = e.overNode;
+    console.log("OVERNODE", overNode);
+    if (!overNode) {
+        return;
+    }
+                      
+    var node = e.node;
+    console.log("NODE", node);
+                      
+    var movingData = node.data;
+                      
+    // take new parent path from parent, if data is missing, means it's the root node, which has no data.
+    var newParentPath = overNode.data
+        ? overNode.data.path
+        : [];
+
+
+    console.log("New Parent Path :", newParentPath);
+    console.log("Node Path: ", movingData.path);
+    var equal = true;
+    if (newParentPath.length !== movingData.path.length) {
+        equal = false;  
+    } else {
+        newParentPath.forEach(function (item, index) {
+            console.log("Comparing :");
+            console.log(item, movingData.path[index]);
+                      
+            if (movingData.path[index] !== item) {
+                equal = false;
+            }
+        });
+    }
+
+    //is false if dropped on the same cell as picked up from
+    var needToChangeParent = !equal;
+
+                      
+    console.log("Change parent? ", needToChangeParent);
+    
+
+    //check to make sure we are not moving a parent into one of its children
+    var invalidMode = false;
+    let children = [...(node.childrenAfterGroup || [])];
+    while (children.length) {
+        const child = children.shift();
+        if (!child) {
+            continue;
+        }
+
+        if (child.key === overNode.key) {
+            invalidMode = true;
+        }
+
+        //add "granchildren" to the queue
+        if (child.childrenAfterGroup && child.childrenAfterGroup.length) {
+            children.push(...child.childrenAfterGroup);
+        }
+    }
+                      
+    if (invalidMode) {
+        console.log("invalid move");
+    }
+    
+    console.log("Invalid move? ", invalidMode);
+
+    function moveToPath(newParentPath, node, allUpdatedNodes) {
+                      
+        console.log("IN FUNCTION");
+        // last part of the file path is the file name
+        var oldPath = node.data.path;
+        var fileName = oldPath[oldPath.length - 1];
+        var newChildPath = newParentPath.slice();
+        newChildPath.push(fileName);
+
+        node.data.path = newChildPath;
+
+        allUpdatedNodes.push(node.data);
+
+        if (node.childrenAfterGroup) {
+            node.childrenAfterGroup.forEach((childNode) => {
+            moveToPath(newChildPath, childNode, allUpdatedNodes);
+            });
+        }
+    }
+      
+    if (needToChangeParent && !invalidMode) {
+        var updatedRows = [];
+        console.log("BEFORE");
+        moveToPath(newParentPath, e.node, updatedRows);
+        console.log("AFTER");
+                      
+
+        window.gridApi.applyTransaction({
+            update: updatedRows,
+        });
+
+        window.gridApi.clearFocusedCell();
+    }
+}
+""")
+
+getRowNodeId = JsCode("""
+function getRowNodeId(data) {
+    return data.id
+}
+""")
+
+onGridReady = JsCode("""
+function onGridReady(params) {
+    console.log("Grid is ready");
+    window.gridApi = params.api; // Assign the grid API to a global variable
+    console.log("Grid API set:", window.gridApi);
+}
+""")
+
+onRowDragMove = JsCode("""
+function onRowDragMove(event) {
+    //console.log("RowDragMove", event);
+    var movingNode = event.node;
+    var overNode = event.overNode;
+
+    //console.log("Moving :", movingNode);
+    //console.log("Over :", overNode);
+              
+}
+""")
+getDataPath = JsCode("""
+function getDataPath(data) {
+    return data.path;
+} 
+""")
+
+#https://discuss.streamlit.io/t/drag-and-drop-rows-in-a-dataframe/33077
+with st.container():
+    data = pd.read_json('contents_tree.json')
+
+    gb = GridOptionsBuilder.from_dataframe(data)
+    gb.configure_default_column(rowDrag = True, rowDragManaged = False, rowDragEntireRow = True, rowDragMultiRow=True)
+    gb.configure_column('bloco', rowDrag = True, rowDragEntireRow = True)
+    gb.configure_grid_options(rowDragManaged = False, onRowDragEnd = onRowDragEnd, deltaRowDataMode = False, getRowNodeId = getRowNodeId, animateRows = False, onRowDragMove = onRowDragMove, groupDefaultExpanded=-1, treeData=True, getDataPath=getDataPath, onGridReady=onGridReady)
+    gridOptions = gb.build()
+
+    grid = AgGrid(data,
+        gridOptions=gridOptions,
+        allow_unsafe_jscode=True,
+        update_on=['rowDragEnd', 'columnRowGroupChanged', 'rowDataUpdated'],)
+
+st.write(grid['data'])
 
 '''
 Project Steps:
