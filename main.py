@@ -468,9 +468,6 @@ with computer_vision_zone:
             st.session_state['df'] = linked_list_df
 
             #concatenate the text, based off the linked list
-            
-
-            
             st.dataframe(linked_list_df)
             
             # Make dataframe editable
@@ -488,18 +485,23 @@ with result_edit_zone:
     if (st.session_state["comp_vision_completed"]):
         df = st.session_state["df"]
 
-        df['Author'] = ''
-        df['Title'] = ''
+        # Initialize 'Author' and Title' as Boolean objects
+        if 'Author' not in df.columns:
+            df['Author'] = False
+        if 'Title' not in df.columns:
+            df['Title'] = False
 
-        edited_df = st.data_editor(df, column_order=['LL_Text', 'Author', 'Title'], num_rows='dynamic', disabled=False)
-
+        # Editable DataFrame
+        edited_df = st.data_editor(
+            df, 
+            column_order=['LL_Text', 'Author', 'Title'], 
+            num_rows='dynamic', 
+            disabled=False)
+        
+        # Sort the DataFrame
         sorted_df = edited_df.sort_values(by="y_min").reset_index(drop=True)
 
-
-        #st.dataframe(sorted_df) 
-        #print(sorted_df.columns.tolist())
-
-        #add a row for the root
+        # Add a row for the root
         root_row = pd.DataFrame({
             'index': [None],
             'Bounding Box X': [None],
@@ -519,14 +521,34 @@ with result_edit_zone:
         })
 
         df = pd.concat([root_row, sorted_df], ignore_index=True)
-
-        #add a column for "type". make '' for all except root.
+        
+        # Create checkboxes for 'Author' and 'Title' columns
+        for index, row in df.iterrows():
+            if index == 0: # Skip root row
+                continue
+            
+            # Otherwise update 'Author' and 'Title' using checkboxes
+            author_key = f"author_{index}"
+            title_key = f"title_{index}"
+            df.at[index, 'Author'] = st.checkbox(
+                f"Mark as Author: {row['LL_Text']}",
+                key=author_key,
+                value=bool(row["Author"])
+            )
+            df.at[index, "Title"] = st.checkbox(
+                f"Mark as Title: {row['LL_Text']}",
+                key=title_key,
+                value=bool(row["Title"])
+                )
+            
+        # Add a column for "type". make '' for all except root.
         df['Type'] = ''
         df.at[0, 'Type'] = "ROOT"
         df.at[0, 'LL_Text'] = "ROOT"
 
         #add a path column. Make sure it's dtype=object 
         df['Path'] = [[] for _ in range(len(df))]
+
         #for all except ROOT the contents of this col will be like ['ROOT', ' ROW TEXT']
         df.at[0, 'Path'] = ['ROOT']
         for i in range(1, len(df)):
@@ -535,10 +557,10 @@ with result_edit_zone:
         st.dataframe(df)
 
         df_subset = df[["LL_Text","Type","Path"]]
-        df_subset.rename(columns={"LL_Text": "Text"})
+        df_subset.rename(columns={"LL_Text": "Text"}, inplace=True)
         json = df_subset.to_json(orient='records')
 
-        print(json)
+#         print(json)
         
         #add a 
 #get the webcam thingy working
