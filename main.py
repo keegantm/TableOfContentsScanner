@@ -8,6 +8,8 @@ import pandas as pd
 from scipy import ndimage
 import pytesseract
 from pytesseract import Output
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+
 '''
 Keegan's Todos:
 - Change polygon to rect
@@ -41,6 +43,7 @@ crop_input_zone = st.container()
 angle_input_zone = st.container()
 computer_vision_zone = st.container()
 result_edit_zone = st.container()
+hierarchy_edit_zone = st.container()
 
 def getCameraDataThree():
     camera_result = st.camera_input("Take a level, well lit picture of the table of contents here", key="camera")
@@ -68,6 +71,12 @@ def getCameraDataThree():
                 
             if ('df' in st.session_state.keys()):
                 st.session_state['df'] = None
+
+            if ('hierarchy_prepared' in st.session_state.keys()):
+                st.session_state['hierarchy_prepared'] = False
+
+            if ('hierarchy_df' in st.session_state.keys()):
+                st.session_state['hierarchy_df'] = None
 
             st.cache_data.clear() # This is causing an error for me when I take a picture.
             # https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_data
@@ -123,7 +132,7 @@ def displayCanvasResults():
     for col in objects.select_dtypes(include=['object']).columns:
         objects[col] = objects[col].astype("str")
     
-    st.dataframe(objects)
+    #st.dataframe(objects)
     
     st.image(st.session_state['rect'])
 
@@ -258,7 +267,180 @@ def calculateText(df):
     ll_heads_df = lists.loc[list(ll_head_indices)].reset_index(drop=True)
     return ll_heads_df
 
+onRowDragEnd = JsCode("""
+function onRowDragEnd(e) {
+    console.log('onRowDragEnd', e);
+                      
+    var overNode = e.overNode;
+    console.log("OVERNODE", overNode);
+    if (!overNode) {
+        return;
+    }
+                      
+    var node = e.node;
+    console.log("NODE", node);
+                      
+    var movingData = node.data;
+                      
+    // take new parent path from parent, if data is missing, means it's the root node, which has no data.
+    var newParentPath = overNode.data
+        ? overNode.data.Path
+        : [];
 
+
+    console.log("New Parent Path :", newParentPath);
+    console.log("Node Path: ", movingData.Path);
+    var equal = true;
+    if (newParentPath.length !== movingData.Path.length) {
+        equal = false;  
+    } else {
+        newParentPath.forEach(function (item, index) {
+            console.log("Comparing :");
+            console.log(item, movingData.Path[index]);
+                      
+            if (movingData.Path[index] !== item) {
+                equal = false;
+            }
+        });
+    }
+
+    //is false if dropped on the same cell as picked up from
+    var needToChangeParent = !equal;
+
+                      
+    console.log("Change parent? ", needToChangeParent);
+    
+
+    //check to make sure we are not moving a parent into one of its children
+    var invalidMode = false;
+    let children = [...(node.childrenAfterGroup || [])];
+    while (children.length) {
+        const child = children.shift();
+        if (!child) {
+            continue;
+        }
+
+        if (child.key === overNode.key) {
+            invalidMode = true;
+        }
+
+        //add "granchildren" to the queue
+        if (child.childrenAfterGroup && child.childrenAfterGroup.length) {
+            children.push(...child.childrenAfterGroup);
+        }
+    }
+                      
+    if (invalidMode) {
+        console.log("invalid move");
+    }
+    
+    console.log("Invalid move? ", invalidMode);
+
+    function moveToPath(newParentPath, node, allUpdatedNodes) {
+                      
+        console.log("IN FUNCTION");
+        // last part of the file path is the file name
+        var oldPath = node.data.Path;
+        var fileName = oldPath[oldPath.length - 1];
+        var newChildPath = newParentPath.slice();
+        newChildPath.push(fileName);
+
+        node.data.Path = newChildPath;
+
+        allUpdatedNodes.push(node.data);
+
+        if (node.childrenAfterGroup) {
+            node.childrenAfterGroup.forEach((childNode) => {
+            moveToPath(newChildPath, childNode, allUpdatedNodes);
+            });
+        }
+    }
+      
+    if (needToChangeParent && !invalidMode) {
+        var updatedRows = [];
+        moveToPath(newParentPath, e.node, updatedRows);
+                      
+        //refreshClientSideRowModel();
+        
+                      
+        var element = document.getElementById("gridContainer");
+        console.log("DIV", element);
+        
+        //element.applyTransaction({
+        //    update: updatedRows,
+        //});
+        //element.clearFocusedCell();
+        //DOES NOT WORK, window.gridApi is undefined due to hard-coded AG-Grid onGridReady
+        // window.gridApi.applyTransaction({
+        //    update: updatedRows,
+        //});
+
+        //window.gridApi.clearFocusedCell();
+    }
+}
+""")
+
+getRowNodeId = JsCode("""
+function getRowNodeId(data) {
+    return data.id
+}
+""")
+
+onGridReady = JsCode("""
+function onGridReady(params) {
+    console.log("Grid is ready");
+    window.gridApi = params.api; // Assign the grid API to a global variable
+    console.log("Grid API set:", window.gridApi);
+}
+""")
+
+onRowDragMove = JsCode("""
+function onRowDragMove(event) {
+    //console.log("RowDragMove", event);
+    //var movingNode = event.node;
+    //var overNode = event.overNode;
+
+    //console.log("Moving :", movingNode);
+    //console.log("Over :", overNode);
+              
+}
+""")
+getDataPath = JsCode("""
+function getDataPath(data) {
+    return data.Path;
+} 
+""")
+
+getTitle = JsCode("""
+function getDataTitle(params) {
+    //console.log("PARAMS", params);
+    //console.log(params.data.title);
+                  
+    //have the grouped column be by the title
+    return params.data.Text;
+}
+""")
+
+def createGrid(db):
+    print("IN BUILDER")
+    gb = GridOptionsBuilder.from_dataframe(db)
+
+    gb.configure_default_column(rowDrag = False, rowDragManaged = False, rowDragEntireRow = False, rowDragMultiRow=False)
+    gb.configure_grid_options(rowDragManaged = False, onRowDragEnd = onRowDragEnd, getRowNodeId = getRowNodeId, groupDefaultExpanded=-1, treeData=True, getDataPath=getDataPath, 
+    autoGroupColumnDef=dict(
+        rowDrag=True,
+        minWidth=300, 
+        pinned="The Groups", 
+        cellRendererParams=dict(suppressCount=True, innerRenderer=getTitle)
+    ))
+    gridOptions = gb.build()
+
+    grid = AgGrid(db,
+        gridOptions=gridOptions,
+        allow_unsafe_jscode=True,
+        update_on=['rowDragEnd'],)
+    
+    return grid
 
     
 
@@ -370,40 +552,40 @@ with computer_vision_zone:
             # Store the grayscale image in session state for OCR
             st.session_state["grayscale_img"] = grayscale_img
             
-            '''
-            equ = cv.equalizeHist(grayscale_img)
+            
+            #equ = cv.equalizeHist(grayscale_img)
             #st.image(equ, caption="Histogram Equalized")
-            '''
+            
 
-            '''
-            clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            cl1 = clahe.apply(grayscale_img)
+            
+            #clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            #cl1 = clahe.apply(grayscale_img)
             #st.image(cl1, caption="Adaptive hstEQ")
-            '''
+            
             normalizedImg = cv.normalize(grayscale_img, None, 0, 255, cv.NORM_MINMAX)
             #st.image(normalizedImg, caption="Normalized")
 
-            '''
-            equ2 = cv.equalizeHist(normalizedImg)
+            
+            #equ2 = cv.equalizeHist(normalizedImg)
             #st.image(equ2, caption="Normalized, then eqHST")
 
-            eq3 = clahe.apply(normalizedImg)
+            #eq3 = clahe.apply(normalizedImg)
             #st.image(eq3, caption="Normalized, then adaptice hstEQ")
             
-            imgf0 = adaptive_threshold(grayscale_img, block_size=11, C=5)
+            #imgf0 = adaptive_threshold(grayscale_img, block_size=11, C=5)
             #st.image(imgf0, caption="Local Adaptive Threshold on gray")
-            '''
+            
 
             imgf = adaptive_threshold(normalizedImg, block_size=15, C=7)
             #st.image(imgf, caption="Local Adaptive Threshold on normalized")
 
-            '''
-            imgf2 = adaptive_threshold(eq3, block_size=11, C=5)
+            
+            #imgf2 = adaptive_threshold(eq3, block_size=11, C=5)
             #st.image(imgf2, caption="Local Adaptive Threshold on normalized + Adaptive hst")
 
-            imgf3 = adaptive_threshold(cl1, block_size=11, C=5)
+            #imgf3 = adaptive_threshold(cl1, block_size=11, C=5)
             #st.image(imgf3, caption="Threshold on adaptive HstEQ")
-            '''
+            
             #Rotate manually
             #DONE
 
@@ -455,12 +637,12 @@ with computer_vision_zone:
             st.image(copy)
 
             df = pd.DataFrame(data)
-            st.dataframe(df)
+            #st.dataframe(df)
 
             #group text horizontally, create LL 
             rectangle_lists = calculate_linked_lists(df)
 
-            st.dataframe(rectangle_lists)
+            #st.dataframe(rectangle_lists)
 
             linked_list_df = calculateText(rectangle_lists)
 
@@ -468,7 +650,7 @@ with computer_vision_zone:
             st.session_state['df'] = linked_list_df
 
             #concatenate the text, based off the linked list
-            st.dataframe(linked_list_df)
+            #st.dataframe(linked_list_df)
             
             # Make dataframe editable
             
@@ -481,87 +663,166 @@ with computer_vision_zone:
 
 #    st.write_stream    check this out
 
-with result_edit_zone:
-    if (st.session_state["comp_vision_completed"]):
-        df = st.session_state["df"]
+def prepare_data_for_hierarchy(df):
+#sort the editted result, by the y value
+    sorted_df = df.sort_values(by="y_min").reset_index(drop=True)
 
-        # Initialize 'Author' and Title' as Boolean objects
+    #add a column for "type". This is just used to determine if a row is the root. make '' for all except root
+    sorted_df['Type'] = ''
+
+    #add a row that will be the static root of the hierarchy
+    root_row = pd.DataFrame({
+        'index': [None],
+        'Bounding Box X': [None],
+        'Bounding Box Y': [None],
+        'Bounding Box Width': [None],
+        'Bounding Box Height': [None],
+        'OCR_Text': ['ROOT'],
+        'Next': [None],
+        'Prev': [None],
+        'x_min': [None],
+        'x_max': [None],
+        'y_min': [None],
+        'y_max': [None],
+        'Text': "ROOT",
+        'Author': [None],
+        'Title': [None],
+        'Type': "ROOT",
+    })
+
+    #overwrite df var, assigning sorted df and also adding root row
+    df = pd.concat([root_row, sorted_df], ignore_index=True)
+    
+    #for unique row identification, insert current row indices into the unused index col
+    #df = df.reset_index()
+    df = df.reset_index().rename(columns={'level_0': 'id'})
+
+    #make string for populating list later on
+    df['id'] = df['id'].astype(str)
+
+    #add a path column. Make sure it's dtype=object 
+    #this column is a list of the parents of this node (including the node itself)
+    df['Path'] = [[] for _ in range(len(df))]
+    
+    #populate starting hierarchy, everything is child of Root
+    df.at[0, 'Path'] = ['0']
+    for i in range(1, len(df)):
+        df.at[i, 'Path'] = ['0', df.at[i, 'id']]
+    
+    #POSSIBLE TODO: Apply algorithmic first pass to generate hierarchy
+
+    #st.write("Edited result")
+    #st.dataframe(df)
+
+    df_subset = df[["id", "Path", "Text","Author", 'Title']]
+
+    #st.write("Edited Subset")
+    #st.dataframe(df_subset)
+
+    return df_subset
+
+
+def handle_data_editor_change():
+    #here, we can inform the hierarchy that new data was input
+    st.session_state['hierarchy_prepared'] = False
+    print("CHANGE IN EDITOR, PREPARED FALSE")
+
+with result_edit_zone:
+    if ("hierarchy_prepared") not in st.session_state.keys():
+        st.session_state['hierarchy_prepared'] = False
+        st.session_state['hierarchy_df'] = None
+        
+    if (st.session_state["comp_vision_completed"]):
+
+
+        # ------------------------
+        # Prepare df for content editting
+        # ------------------------
+
+        #get linked list dataframe
+        df = st.session_state["df"]
+        #rename LL_Text to text
+        df.rename(columns={"LL_Text": "Text"}, inplace=True)
+
+        #Add columns for the user to designate some text as Author/Title
         if 'Author' not in df.columns:
             df['Author'] = False
         if 'Title' not in df.columns:
             df['Title'] = False
 
-        # Editable DataFrame
+
+        st.write("# Edit Result Content!")
+        #CREATE DATA EDITOR, and return result as a dataframe
         edited_df = st.data_editor(
             df, 
-            column_order=['LL_Text', 'Author', 'Title'], 
+            column_order=['Text', 'Author', 'Title'], 
             num_rows='dynamic', 
-            disabled=False)
+            disabled=False,
+            on_change=handle_data_editor_change)   
+
+        if not st.session_state['hierarchy_prepared']:
+            print("INITIALIZING DATA FOR HIERARCHY")
+
+            hierarchical_df = prepare_data_for_hierarchy(edited_df)
+
+            st.session_state['hierarchy_prepared'] = True
+            st.session_state['hierarchy_df'] = hierarchical_df
+        else:
+            print("CANNOT INITIALIZE DATA FOR HIERARCHY")
         
-        # Sort the DataFrame
-        sorted_df = edited_df.sort_values(by="y_min").reset_index(drop=True)
-
-        # Add a row for the root
-        root_row = pd.DataFrame({
-            'index': [None],
-            'Bounding Box X': [None],
-            'Bounding Box Y': [None],
-            'Bounding Box Width': [None],
-            'Bounding Box Height': [None],
-            'OCR_Text': ['ROOT'],
-            'Next': [None],
-            'Prev': [None],
-            'x_min': [None],
-            'x_max': [None],
-            'y_min': [None],
-            'y_max': [None],
-            'LL_Text': [None],
-            'Author': [None],
-            'Title': [None]
-        })
-
-        df = pd.concat([root_row, sorted_df], ignore_index=True)
         
         # Create checkboxes for 'Author' and 'Title' columns
-        for index, row in df.iterrows():
-            if index == 0: # Skip root row
-                continue
-            
-            # Otherwise update 'Author' and 'Title' using checkboxes
-            author_key = f"author_{index}"
-            title_key = f"title_{index}"
-            df.at[index, 'Author'] = st.checkbox(
-                f"Mark as Author: {row['LL_Text']}",
-                key=author_key,
-                value=bool(row["Author"])
-            )
-            df.at[index, "Title"] = st.checkbox(
-                f"Mark as Title: {row['LL_Text']}",
-                key=title_key,
-                value=bool(row["Title"])
-                )
-            
-        # Add a column for "type". make '' for all except root.
-        df['Type'] = ''
-        df.at[0, 'Type'] = "ROOT"
-        df.at[0, 'LL_Text'] = "ROOT"
-
-        #add a path column. Make sure it's dtype=object 
-        df['Path'] = [[] for _ in range(len(df))]
-
-        #for all except ROOT the contents of this col will be like ['ROOT', ' ROW TEXT']
-        df.at[0, 'Path'] = ['ROOT']
-        for i in range(1, len(df)):
-            df.at[i, 'Path'] = ['ROOT', df.at[i, 'LL_Text']]
-
-        st.dataframe(df)
-
-        df_subset = df[["LL_Text","Type","Path"]]
-        df_subset.rename(columns={"LL_Text": "Text"}, inplace=True)
-        json = df_subset.to_json(orient='records')
-
-#         print(json)
+        #for index, row in df.iterrows():
+        #    if index == 0: # Skip root row
+        #        continue
+        #    
+        #    # Otherwise update 'Author' and 'Title' using checkboxes
+        #    author_key = f"author_{index}"
+        #    title_key = f"title_{index}"
+        #    df.at[index, 'Author'] = st.checkbox(
+        #        f"Mark as Author: {row['Text']}",
+        #        key=author_key,
+        #        value=bool(row["Author"])
+        #    )
+        #    df.at[index, "Title"] = st.checkbox(
+        #        f"Mark as Title: {row['Text']}",
+        #        key=title_key,
+        #        value=bool(row["Title"])
+        #        )
         
+with hierarchy_edit_zone:
+    print()
+    if (st.session_state['hierarchy_prepared']):
+        df = st.session_state['hierarchy_df']
+
+        st.write("# Edit Result Hierarchy!")
+
+        resp = createGrid(df)
+        
+        if (resp.event_data):
+
+            #check if the paths are any different
+            before_df = st.session_state['hierarchy_df']
+            current_df = resp['data']
+
+            #print(f"before ", before_df)
+            #print(f"after ", current_df)
+
+            before_paths = set(tuple(path) for path in before_df["Path"])
+            current_paths = set(tuple(path) for path in current_df["Path"])
+            
+            difference = before_paths != current_paths
+
+            if (difference):
+                print("NEW DATA")
+                #st.write(resp.event_data)
+                st.session_state['hierarchy_df'] = resp['data']
+                st.rerun()
+            else:
+                print("IDENTICAL")
+
+
+
         #add a 
 #get the webcam thingy working
 #get two sliders
