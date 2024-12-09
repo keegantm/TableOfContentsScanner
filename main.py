@@ -7,7 +7,7 @@ from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 from scipy import ndimage
 import pytesseract
-from pytesseract import Output
+#from pytesseract import Output
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from utils import *
 
