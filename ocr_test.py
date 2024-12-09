@@ -1,7 +1,7 @@
 import cv2
 import pytesseract
 import matplotlib.pyplot as plt
-from utils import *
+from utils_old import *
 
 # Load the original image
 input_image = cv2.imread('Images/IMG_8248.jpg')
