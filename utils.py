@@ -373,7 +373,7 @@ function getDataTitle(params) {
 Function for building an Ag-Grid from a dataframe
 '''
 def createGrid(db):
-    print("IN GRID BUILDER")
+    #print("IN GRID BUILDER")
     gb = GridOptionsBuilder.from_dataframe(db)
 
     gb.configure_default_column(rowDrag = False, rowDragManaged = False, rowDragEntireRow = False, rowDragMultiRow=False)

@@ -20,9 +20,32 @@ computer_vision_zone = st.container()
 result_edit_zone = st.container()
 hierarchy_edit_zone = st.container()
 
+with header:
+    st.markdown("# Table of Contents Scanner")
+    st.markdown("An interactive app for table of contents extraction, and editting.")
+
+with instructions:
+    st.markdown('''### Steps : ''')
+    st.markdown('''
+                1. Take a Photo 
+                2. Crop the Photo 
+                3. De-Skew the Photo
+                4. Edit Computer Vision Output
+                5. Apply a Hierarchy to the Content''')
+
 #function to get the user's camera input
 def getCameraData():
-    camera_result = st.camera_input("Take a level, well lit picture of the table of contents here", key="camera")
+
+
+    st.markdown('''## 1. Take a Photo ''')
+    st.markdown('''For the best results ensure that the content is :''')
+    st.markdown('''
+            - Well Lit
+            - Large in the frame
+            - As level as possible
+            - As flat as possible
+            ''')
+    camera_result = st.camera_input(label="Take a picture of the table of contents.", key="camera")
 
     if camera_result:
 
@@ -114,7 +137,30 @@ def displayCropResults():
     
     #st.dataframe(objects)
     
-    st.image(st.session_state['rect'])
+    st.image(st.session_state['rect'], caption="Cropped Image")
+
+with image_input_and_crop_zone:
+    #initialize state vars 
+    if 'image_captured' not in st.session_state.keys():
+        #print("Image initialized to none")
+        st.session_state['image_captured'] = None
+    if 'canvas' not in st.session_state.keys():
+        #print("Canvas initialized to null")
+        st.session_state['canvas'] = None
+        st.session_state['cropped'] = False
+
+    #have the user input an image
+    getCameraData()
+
+    #allow the user to crop an image, if an image has been taken
+    if (st.session_state['image_captured'] != None):
+        if not st.session_state['cropped']:
+            st.markdown('''## 2. Crop the Photo ''')
+            st.markdown('''Drag to draw a rectangle over the content, from the top left to the bottom right.''')
+            cropImage()
+        else:
+            st.markdown('''## 2. Crop the Photo ''')
+            displayCropResults()
 
 #function allowing the user to draw a line, in order to define a NEW X axis on an image & rotate it.
 def displayLineInput():
@@ -124,9 +170,6 @@ def displayLineInput():
         print("WHATNJKSBDKJNASLKDJKLAS")
         return
     
-    #instructions!
-    st.write("Underline a line of text, in order to rotate the image to be level.")
-
     #get the cropped image
     image = st.session_state['rect'].astype('uint8')
 
@@ -152,33 +195,6 @@ def displayLineInput():
             st.session_state['angleFound'] = True
             st.rerun()
 
-with header:
-    st.title("Table of Contents Scanner")
-    st.text("An interactive app for table of contents extraction, and editting")
-
-with instructions:
-    st.write("Instructions blah blah blah")
-
-with image_input_and_crop_zone:
-    #initialize state vars 
-    if 'image_captured' not in st.session_state.keys():
-        #print("Image initialized to none")
-        st.session_state['image_captured'] = None
-    if 'canvas' not in st.session_state.keys():
-        #print("Canvas initialized to null")
-        st.session_state['canvas'] = None
-        st.session_state['cropped'] = False
-
-    #have the user input an image
-    getCameraData()
-
-    #allow the user to crop an image, if an image has been taken
-    if (st.session_state['image_captured'] != None):
-        if not st.session_state['cropped']:
-            cropImage()
-        else:
-            displayCropResults()
-
 with angle_input_zone:
     #initialize state vars
     if 'angleFound' not in st.session_state.keys():
@@ -190,6 +206,9 @@ with angle_input_zone:
     if (st.session_state['image_captured'] != None) and (st.session_state['cropped'] == True):
 
         if not (st.session_state["angleFound"]):
+            st.write("## 3. De-Skew the image.")
+            st.write("From left-to-right, click and drag to underline a line of text.")
+
             displayLineInput()
 
         #st.rerun()
@@ -239,7 +258,6 @@ with computer_vision_zone:
             grayscale_img = cv.cvtColor(rotated, cv.COLOR_RGB2GRAY)
 
             # Display the rotated image
-            st.text("Rotated Image:")
             st.image(rotated, caption="Rotated and Resized Image")
 
             # Display the grayscale image
@@ -331,8 +349,10 @@ with result_edit_zone:
         st.session_state['hierarchy_prepared'] = False
         st.session_state['hierarchy_df'] = None
     
-
     if (st.session_state["comp_vision_completed"]):
+        
+        st.markdown('''## 4. Edit Computer Vision Output ''')
+        st.markdown(''' You can correct row text, add rows, delete rows, and designate rows as containing Title and/or Author content. ''')
 
         # ------------------------
         # Prepare df for content editting
@@ -349,7 +369,6 @@ with result_edit_zone:
         if 'Title' not in df.columns:
             df['Title'] = False
 
-        st.write("# Edit Result Content!")
         #create data editor and return result as a dataframe
         edited_df = st.data_editor(
             df, 
@@ -373,10 +392,11 @@ with hierarchy_edit_zone:
     #only display a hierarchy editor if we have data to display
     if (st.session_state['hierarchy_prepared']):
         
+        st.markdown('''## 5. Apply a Hierarchy to the Content ''')
+        st.markdown(''' Drag a row on top of another to create a child-parent relationship ''')
+
         #get data for hierarchy
         df = st.session_state['hierarchy_df']
-
-        st.write("# Edit Result Hierarchy!")
         
         #create interactive Ag-Grid
         resp = createGrid(df)
@@ -404,6 +424,6 @@ with hierarchy_edit_zone:
 
 
 #Todos:
-# 1. Clean up code
-# 2. Fix instructions
+# 1. Clean up code DONE
+# 2. Fix instructions DONE
 # 3. See if we can do a better crop + image tweak
