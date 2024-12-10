@@ -100,6 +100,7 @@ def displayCanvasForEditing():
         update_streamlit=True,
     )
 
+    st.write("Draw a box around the text area you want to process. Remember, less is more.")
     if canvas_result.json_data is not None:
         objects = pd.json_normalize(canvas_result.json_data["objects"]) # need to convert obj to str because PyArrow
 
@@ -451,10 +452,11 @@ def createGrid(db):
 
 with header:
     st.title("Table of Contents Scanner")
-    st.text("Add very brief intro")
+    st.text("This app will help you match Authors and Titles in anthologies of short stories")
 
 with instructions:
-    st.write("Instructions blah blah blah")
+    st.write("Before you begin, make sure you are in a well lit area and consider using something to hold the book."
+             "If you don't have a book stand, just hold the book as still as possible while taking the photo.")
 
 with crop_input_zone:
     if 'image_captured' not in st.session_state.keys():
@@ -752,6 +754,7 @@ with result_edit_zone:
 
 
         st.write("# Edit Result Content!")
+        st.write("Correct the spelling of title and author here and select if the text is an author or title")
         #CREATE DATA EDITOR, and return result as a dataframe
         edited_df = st.data_editor(
             df, 
