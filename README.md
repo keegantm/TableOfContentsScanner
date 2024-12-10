@@ -1,5 +1,8 @@
 # TableOfContentsScanner
 
+Keegan Moseley- keegantm@comcast.net
+Ryan - 
+
 ## Setup Instructions
 
 1) **Install Dependencies**  
@@ -15,5 +18,4 @@ download the following packages:
     - pytesseract Note: You will likely have to pip install this
     - st_aggrid
 
-2) In the TableOfContentsScanner directory, use the command ```streamlit run main.py ``` to start
-the program
+2) In the TableOfContentsScanner directory, use the command ```streamlit run main.py ``` to start the program
